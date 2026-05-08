@@ -7,10 +7,9 @@ from fastapi import FastAPI, UploadFile, File
 from fastapi.responses import JSONResponse
 
 from image_processing import (
-    extract_orb_descriptors,
-    descriptors_to_bovw,
     preprocess_image,
-    check_image_quality
+    check_image_quality,
+    extract_full_feature_vector
 )
 
 from recommendations import get_recommendation
@@ -22,18 +21,19 @@ CONFIDENCE_THRESHOLD = 0.55
 app = FastAPI(
     title="Plant Disease Diagnosis API",
     description="API для автоматизованого діагностування хвороб рослинних культур",
-    version="1.0.0"
+    version="1.1.0"
 )
 
-kmeans = joblib.load(os.path.join(MODELS_PATH, "bovw_kmeans.joblib"))
-classifier = joblib.load(os.path.join(MODELS_PATH, "classifier.joblib"))
-label_encoder = joblib.load(os.path.join(MODELS_PATH, "label_encoder.joblib"))
+
+kmeans = joblib.load(os.path.join(MODELS_PATH, "hybrid_bovw_kmeans.joblib"))
+classifier = joblib.load(os.path.join(MODELS_PATH, "hybrid_classifier.joblib"))
+label_encoder = joblib.load(os.path.join(MODELS_PATH, "hybrid_label_encoder.joblib"))
 
 
 @app.get("/")
 def root():
     return {
-        "message": "Plant Disease Diagnosis API is running"
+        "message": "Hybrid Plant Disease Diagnosis API is running"
     }
 
 
@@ -52,7 +52,7 @@ async def predict(file: UploadFile = File(...)):
             }
         )
 
-    gray = preprocess_image(image)
+    _, gray = preprocess_image(image)
 
     if not check_image_quality(gray):
         return {
@@ -62,8 +62,7 @@ async def predict(file: UploadFile = File(...)):
             "confidence": 0.0
         }
 
-    _, descriptors, _ = extract_orb_descriptors(image)
-    feature_vector = descriptors_to_bovw(descriptors, kmeans)
+    feature_vector = extract_full_feature_vector(image, kmeans).reshape(1, -1)
 
     probabilities = classifier.predict_proba(feature_vector)[0]
 
@@ -71,12 +70,23 @@ async def predict(file: UploadFile = File(...)):
     confidence = float(probabilities[predicted_index])
     predicted_class = label_encoder.inverse_transform([predicted_index])[0]
 
+    top_indices = np.argsort(probabilities)[::-1][:3]
+
+    top_predictions = []
+    for idx in top_indices:
+        class_name = label_encoder.inverse_transform([idx])[0]
+        top_predictions.append({
+            "class": class_name,
+            "confidence": round(float(probabilities[idx]), 4)
+        })
+
     if confidence < CONFIDENCE_THRESHOLD:
         return {
             "status": "uncertain",
             "message": "Система не має достатньої впевненості для точного визначення хвороби.",
             "predicted_class": predicted_class,
             "confidence": round(confidence, 4),
+            "top_predictions": top_predictions,
             "recommendation": "Рекомендовано зробити якісніше фото або звернутися до фахівця."
         }
 
@@ -87,5 +97,6 @@ async def predict(file: UploadFile = File(...)):
         "predicted_class": predicted_class,
         "display_name": recommendation_data["name"],
         "confidence": round(confidence, 4),
+        "top_predictions": top_predictions,
         "recommendation": recommendation_data["recommendation"]
     }
