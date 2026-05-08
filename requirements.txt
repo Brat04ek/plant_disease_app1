@@ -1,0 +1,14 @@
+opencv-python
+numpy
+scikit-learn
+scipy
+scikit-image
+matplotlib
+seaborn
+pandas
+pillow
+joblib
+fastapi
+uvicorn
+python-multipart
+pydantic
