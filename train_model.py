@@ -12,8 +12,12 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import (
     accuracy_score,
     classification_report,
-    confusion_matrix
+    confusion_matrix,
+    ConfusionMatrixDisplay
 )
+
+import matplotlib.pyplot as plt
+import pandas as pd
 
 from image_processing import (
     extract_orb_descriptors,
@@ -23,6 +27,7 @@ from image_processing import (
 
 DATASET_PATH = "dataset/PlantVillage"
 MODELS_PATH = "models"
+PHOTO_PATH = "photo"
 
 N_CLUSTERS = 150
 MAX_IMAGES_PER_CLASS = 500
@@ -112,6 +117,79 @@ def build_feature_matrix(image_paths, kmeans_model):
 
     return np.array(features, dtype=np.float32)
 
+def save_confusion_matrix_plot(y_test, y_pred, class_names):
+    """
+    Збереження матриці помилок у вигляді зображення.
+    """
+
+    os.makedirs(PHOTO_PATH, exist_ok=True)
+
+    cm = confusion_matrix(y_test, y_pred)
+
+    fig, ax = plt.subplots(figsize=(12, 10))
+
+    display = ConfusionMatrixDisplay(
+        confusion_matrix=cm,
+        display_labels=class_names
+    )
+
+    display.plot(
+        ax=ax,
+        xticks_rotation=90,
+        colorbar=True
+    )
+
+    plt.title("Confusion Matrix")
+    plt.tight_layout()
+    plt.savefig(os.path.join(PHOTO_PATH, "confusion_matrix.jpg"), dpi=300)
+    plt.close()
+
+def save_classification_metrics_plot(y_test, y_pred, class_names):
+    """
+    Збереження графіка precision, recall та F1-score для кожного класу.
+    """
+
+    os.makedirs(PHOTO_PATH, exist_ok=True)
+
+    report = classification_report(
+        y_test,
+        y_pred,
+        target_names=class_names,
+        output_dict=True,
+        zero_division=0
+    )
+
+    rows = []
+
+    for class_name in class_names:
+        rows.append({
+            "class_name": class_name,
+            "precision": report[class_name]["precision"],
+            "recall": report[class_name]["recall"],
+            "f1_score": report[class_name]["f1-score"]
+        })
+
+    df = pd.DataFrame(rows)
+
+    x = range(len(df))
+
+    plt.figure(figsize=(14, 7))
+    plt.bar([i - 0.25 for i in x], df["precision"], width=0.25, label="Precision")
+    plt.bar(x, df["recall"], width=0.25, label="Recall")
+    plt.bar([i + 0.25 for i in x], df["f1_score"], width=0.25, label="F1-score")
+
+    plt.title("Classification metrics by class")
+    plt.xlabel("Class")
+    plt.ylabel("Metric value")
+    plt.ylim(0, 1.05)
+    plt.xticks(x, df["class_name"], rotation=75, ha="right")
+    plt.legend()
+    plt.tight_layout()
+
+    plt.savefig(os.path.join(PHOTO_PATH, "classification_metrics.jpg"), dpi=300)
+    plt.close()
+
+    df.to_csv(os.path.join(PHOTO_PATH, "classification_metrics.csv"), index=False)
 
 def main():
     os.makedirs(MODELS_PATH, exist_ok=True)
@@ -223,6 +301,19 @@ def main():
 
     print("\nConfusion matrix:")
     print(confusion_matrix(y_test, y_pred))
+
+    print("\nSaving evaluation plots...")
+    save_confusion_matrix_plot(
+        y_test,
+        y_pred,
+        label_encoder.classes_
+    )
+
+    save_classification_metrics_plot(
+        y_test,
+        y_pred,
+        label_encoder.classes_
+    )
 
     print("\nSaving models...")
     joblib.dump(kmeans, os.path.join(MODELS_PATH, "hybrid_bovw_kmeans.joblib"))
