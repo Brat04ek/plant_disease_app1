@@ -5,3 +5,4 @@ dataset
 *.jpg
 *.png
 /photo
+/results
