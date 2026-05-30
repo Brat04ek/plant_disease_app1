@@ -1,6 +1,16 @@
 import os
 import time
 import cv2
+
+import sys
+from pathlib import Path
+
+CURRENT_FILE = Path(__file__).resolve()
+PROJECT_ROOT = CURRENT_FILE.parent.parent if CURRENT_FILE.parent.name == "scripts" else CURRENT_FILE.parent
+
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+    
 import joblib
 import numpy as np
 import pandas as pd
@@ -22,13 +32,13 @@ from sklearn.metrics import (
     ConfusionMatrixDisplay
 )
 
-from image_processing import extract_full_feature_vector
+from src.plant_diagnosis.image_processing import extract_full_feature_vector
 
 
-DATASET_PATH = "dataset/PlantVillage"
-MODELS_PATH = "models"
-RESULTS_PATH = "results"
-OUTPUT_PATH = os.path.join(RESULTS_PATH, "model_comparison")
+DATASET_PATH = str(PROJECT_ROOT / "dataset" / "PlantVillage")
+MODELS_PATH = str(PROJECT_ROOT / "models")
+RESULTS_PATH = str(PROJECT_ROOT / "results")
+OUTPUT_PATH = str(PROJECT_ROOT / "results" / "model_comparison")
 
 MAX_IMAGES_PER_CLASS = 500
 TEST_SIZE = 0.2

@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <title>Діагностування хвороб рослин</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <link rel="stylesheet" href="/static/styles.css?v=3">
+</head>
+<body>
+    <main class="page">
+        <section class="hero">
+            <div class="hero-content">
+                <div class="badge">Plant Disease Diagnosis</div>
+
+                <h1>Автоматизоване діагностування хвороб рослин</h1>
+
+                <p>
+                    Завантажте фото листка рослини, а система визначить імовірний клас,
+                    рівень впевненості моделі та надасть коротку рекомендацію.
+                </p>
+
+                <div class="hero-stats">
+                    <div>
+                        <strong>15</strong>
+                        <span>класів</span>
+                    </div>
+                    <div>
+                        <strong>93%</strong>
+                        <span>accuracy</span>
+                    </div>
+                    <div>
+                        <strong>0.9318</strong>
+                        <span>macro F1</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card upload-card">
+                <h2>Завантаження зображення</h2>
+                <p class="card-subtitle">
+                    Підтримуються формати JPG, JPEG та PNG.
+                </p>
+
+                <form id="uploadForm">
+                    <div class="drop-zone" id="dropZone">
+                        <div class="drop-icon">🌿</div>
+                        <div class="drop-title">Оберіть або перетягніть фото</div>
+                        <div class="drop-subtitle">
+                            Бажано, щоб листок був чітким і добре освітленим
+                        </div>
+
+                        <input
+                            type="file"
+                            id="imageInput"
+                            accept="image/jpeg,image/png,image/jpg"
+                            class="file-input"
+                        >
+                    </div>
+
+                    <div class="preview-wrapper hidden" id="previewWrapper">
+                        <img id="previewImage" alt="Попередній перегляд">
+                    </div>
+
+                    <button type="submit" class="primary-button" id="submitButton">
+                        Класифікувати зображення
+                    </button>
+
+                    <p class="debug-text" id="debugText"></p>
+                </form>
+            </div>
+        </section>
+
+        <section class="result-section hidden" id="resultSection">
+            <div class="card result-card">
+                <div class="result-header">
+                    <div>
+                        <span class="result-label">Результат</span>
+                        <h2 id="resultTitle">—</h2>
+                    </div>
+
+                    <div class="confidence-circle">
+                        <span id="confidenceValue">0%</span>
+                    </div>
+                </div>
+
+                <div id="statusBadge" class="status-badge">—</div>
+
+                <p class="recommendation" id="recommendationText">—</p>
+
+                <h3>Топ-3 прогнози</h3>
+
+                <div class="top-list" id="topPredictions"></div>
+            </div>
+        </section>
+
+        <section class="info-grid">
+            <div class="info-card">
+                <h3>Як працює система?</h3>
+                <p>
+                    Зображення проходить попередню обробку, після чого формується
+                    гібридний вектор ознак: ORB/BoVW, HSV, LBP та ознаки уражених ділянок.
+                </p>
+            </div>
+
+            <div class="info-card">
+                <h3>Що означає впевненість?</h3>
+                <p>
+                    Впевненість показує, наскільки модель схиляється до обраного класу.
+                    Якщо значення низьке, результат подається як невизначений.
+                </p>
+            </div>
+
+            <div class="info-card">
+                <h3>Важливо</h3>
+                <p>
+                    Система є інструментом первинної оцінки та не замінює консультацію
+                    агронома або лабораторний аналіз.
+                </p>
+            </div>
+        </section>
+    </main>
+
+    <script src="/static/app.js?v=3"></script>
+</body>
+</html>

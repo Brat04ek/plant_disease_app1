@@ -1,13 +1,22 @@
 import os
-from collections import Counter
+import sys
+from pathlib import Path
 
+CURRENT_FILE = Path(__file__).resolve()
+PROJECT_ROOT = CURRENT_FILE.parent.parent if CURRENT_FILE.parent.name == "scripts" else CURRENT_FILE.parent
+
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+from collections import Counter
+import matplotlib
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import pandas as pd
 from sklearn.model_selection import train_test_split
 
 
 DATASET_PATH = "dataset/PlantVillage"
-OUTPUT_DIR = "photo"
+OUTPUT_DIR = str(PROJECT_ROOT / "results" / "dataset_analysis")
 
 MAX_IMAGES_PER_CLASS = None
 TEST_SIZE = 0.2

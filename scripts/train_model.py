@@ -1,6 +1,15 @@
 import os
 import json
 import time
+import sys
+from pathlib import Path
+
+CURRENT_FILE = Path(__file__).resolve()
+PROJECT_ROOT = CURRENT_FILE.parent.parent if CURRENT_FILE.parent.name == "scripts" else CURRENT_FILE.parent
+
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
 import cv2
 import joblib
 import numpy as np
@@ -26,7 +35,7 @@ from sklearn.metrics import (
     ConfusionMatrixDisplay
 )
 
-from image_processing import (
+from src.plant_diagnosis.image_processing import (
     extract_orb_descriptors,
     extract_full_feature_vector
 )
@@ -36,9 +45,9 @@ from image_processing import (
 # Global settings
 # =========================
 
-DATASET_PATH = "dataset/PlantVillage"
-MODELS_PATH = "models"
-RESULTS_PATH = "results"
+DATASET_PATH = str(PROJECT_ROOT / "dataset" / "PlantVillage")
+MODELS_PATH = str(PROJECT_ROOT / "models")
+RESULTS_PATH = str(PROJECT_ROOT / "results" / "train")
 
 MAX_IMAGES_PER_CLASS = 500
 
