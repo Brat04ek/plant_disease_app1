@@ -5,6 +5,9 @@ import cv2
 import joblib
 import numpy as np
 import pandas as pd
+import matplotlib
+matplotlib.use("Agg")
+
 import matplotlib.pyplot as plt
 
 from collections import Counter
@@ -297,7 +300,7 @@ def create_voting_model(n_estimators: int, svm_C: float, random_state: int):
             ("svm", svm_model)
         ],
         voting="soft",
-        n_jobs=-1
+        n_jobs=1
     )
 
     return voting_model
@@ -343,16 +346,37 @@ def evaluate_predictions(y_true, y_pred):
 def run_cross_validation(train_val_paths, train_val_labels, label_encoder, output_path: str):
     """
     Запуск StratifiedKFold для 5 конфігурацій параметрів.
-    Для кожного fold BoVW-словник будується лише на train-fold.
+    Підтримує resume: якщо частина fold-ів уже порахована,
+    вони пропускаються на основі файлу cv_results_all_folds.csv.
     """
+
+    results_file = os.path.join(output_path, "cv_results_all_folds.csv")
+
+    if os.path.exists(results_file):
+        existing_results_df = pd.read_csv(results_file)
+        all_fold_results = existing_results_df.to_dict("records")
+        print(f"\nResume mode enabled.")
+        print(f"Loaded existing CV results: {len(existing_results_df)} rows")
+    else:
+        existing_results_df = pd.DataFrame()
+        all_fold_results = []
+
+    def fold_already_done(config_name: str, fold_idx: int) -> bool:
+        if existing_results_df.empty:
+            return False
+
+        mask = (
+            (existing_results_df["config_name"] == config_name) &
+            (existing_results_df["fold"] == fold_idx)
+        )
+
+        return bool(mask.any())
 
     skf = StratifiedKFold(
         n_splits=N_SPLITS,
         shuffle=True,
         random_state=RANDOM_STATE
     )
-
-    all_fold_results = []
 
     for config in PARAM_CONFIGS:
         config_name = config["config_name"]
@@ -369,6 +393,10 @@ def run_cross_validation(train_val_paths, train_val_labels, label_encoder, outpu
             skf.split(train_val_paths, train_val_labels),
             start=1
         ):
+            if fold_already_done(config_name, fold_idx):
+                print(f"Skipping {config_name} | Fold {fold_idx}/{N_SPLITS} because it already exists.")
+                continue
+
             print("\n" + "-" * 80)
             print(f"{config_name} | Fold {fold_idx}/{N_SPLITS}")
             print("-" * 80)
@@ -448,19 +476,18 @@ def run_cross_validation(train_val_paths, train_val_labels, label_encoder, outpu
 
             all_fold_results.append(result_row)
 
+            current_results_df = pd.DataFrame(all_fold_results)
+            current_results_df.to_csv(results_file, index=False)
+
             print("\nFold metrics:")
             for key, value in metrics.items():
                 print(f"{key}: {value:.4f}")
 
             print(f"Fold time: {fold_time:.2f} seconds")
-
-            pd.DataFrame(all_fold_results).to_csv(
-                os.path.join(output_path, "cv_results_all_folds.csv"),
-                index=False
-            )
+            print(f"Intermediate results saved to: {results_file}")
 
     cv_results_df = pd.DataFrame(all_fold_results)
-    cv_results_df.to_csv(os.path.join(output_path, "cv_results_all_folds.csv"), index=False)
+    cv_results_df.to_csv(results_file, index=False)
 
     summary_df = (
         cv_results_df

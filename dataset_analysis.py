@@ -12,7 +12,9 @@ OUTPUT_DIR = "photo"
 MAX_IMAGES_PER_CLASS = None
 TEST_SIZE = 0.2
 RANDOM_STATE = 7
-
+MAX_IMAGES_PER_CLASS = 500
+TEST_SIZE = 0.2
+N_SPLITS = 8
 
 def load_dataset(dataset_path: str, max_images_per_class=None):
     """
@@ -152,47 +154,85 @@ def save_health_status_distribution(labels):
 
     return df
 
-
-def save_train_test_distribution(image_paths, labels):
+def save_kfold_split_bar_chart():
     """
-    Будує діаграму розподілу класів у навчальній та тестовій вибірках.
+    Побудова bar chart для схеми поділу даних:
+    80% train_val поділено на 8 fold-ів по 10%,
+    20% відкладено як тестову вибірку.
     """
 
-    train_paths, test_paths, train_labels, test_labels = train_test_split(
-        image_paths,
-        labels,
-        test_size=TEST_SIZE,
-        random_state=RANDOM_STATE,
-        stratify=labels
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
+
+    labels = [
+        "Fold 1", "Fold 2", "Fold 3", "Fold 4",
+        "Fold 5", "Fold 6", "Fold 7", "Fold 8",
+        "Test"
+    ]
+
+    percentages = [10, 10, 10, 10, 10, 10, 10, 10, 20]
+
+    x = range(len(labels))
+
+    plt.figure(figsize=(13, 6))
+
+    bars = plt.bar(x, percentages)
+
+    plt.title("Поділ набору даних для крос-валідації та фінального тестування")
+    plt.xlabel("Частини вибірки")
+    plt.ylabel("Частка від використаного набору даних, %")
+
+    plt.xticks(x, labels, rotation=0)
+    plt.ylim(0, 25)
+
+    for bar, value in zip(bars, percentages):
+        plt.text(
+            bar.get_x() + bar.get_width() / 2,
+            bar.get_height() + 0.5,
+            f"{value}%",
+            ha="center",
+            va="bottom",
+            fontsize=11
+        )
+
+    # Пояснювальні підписи під групами
+    plt.text(
+        3.5,
+        -4.2,
+        "Train_val = 80%: використовується для StratifiedKFold, k = 8",
+        ha="center",
+        va="center",
+        fontsize=11
     )
 
-    train_counts = Counter(train_labels)
-    test_counts = Counter(test_labels)
+    plt.text(
+        8,
+        -4.2,
+        "Test = 20%:\nвідкладена вибірка",
+        ha="center",
+        va="center",
+        fontsize=10
+    )
 
-    classes = sorted(set(labels))
+    # Лінія-групування для 8 fold-ів
+    plt.plot([-.4, 7.4], [-1.5, -1.5], linewidth=1.5)
+    plt.plot([-.4, -.4], [-1.2, -1.8], linewidth=1.5)
+    plt.plot([7.4, 7.4], [-1.2, -1.8], linewidth=1.5)
 
-    df = pd.DataFrame({
-        "class_name": classes,
-        "train": [train_counts[class_name] for class_name in classes],
-        "test": [test_counts[class_name] for class_name in classes]
-    })
+    # Лінія-групування для test
+    plt.plot([7.65, 8.35], [-1.5, -1.5], linewidth=1.5)
+    plt.plot([7.65, 7.65], [-1.2, -1.8], linewidth=1.5)
+    plt.plot([8.35, 8.35], [-1.2, -1.8], linewidth=1.5)
 
-    x = range(len(classes))
-
-    plt.figure(figsize=(14, 7))
-    plt.bar([i - 0.2 for i in x], df["train"], width=0.4, label="Train")
-    plt.bar([i + 0.2 for i in x], df["test"], width=0.4, label="Test")
-
-    plt.title("Train and test distribution by class")
-    plt.xlabel("Class")
-    plt.ylabel("Number of images")
-    plt.xticks(x, classes, rotation=75, ha="right")
-    plt.legend()
     plt.tight_layout()
-    plt.savefig(os.path.join(OUTPUT_DIR, "train_test_distribution.jpg"), dpi=300)
+
+    plt.savefig(
+        os.path.join(OUTPUT_DIR, "kfold_data_split_bar_chart.jpg"),
+        dpi=300,
+        bbox_inches="tight"
+    )
+
     plt.close()
 
-    return df
 
 
 def main():
@@ -212,7 +252,9 @@ def main():
     class_df = save_class_distribution(labels)
     crop_df = save_crop_distribution(labels)
     health_df = save_health_status_distribution(labels)
-    train_test_df = save_train_test_distribution(image_paths, labels)
+
+    # Новий рисунок 3.4.4
+    save_kfold_split_bar_chart()
 
     print("\nClass distribution:")
     print(class_df.to_string(index=False))
@@ -223,13 +265,9 @@ def main():
     print("\nHealth status distribution:")
     print(health_df.to_string(index=False))
 
-    print("\nTrain/test distribution:")
-    print(train_test_df.to_string(index=False))
-
     class_df.to_csv(os.path.join(OUTPUT_DIR, "class_distribution.csv"), index=False)
     crop_df.to_csv(os.path.join(OUTPUT_DIR, "crop_distribution.csv"), index=False)
     health_df.to_csv(os.path.join(OUTPUT_DIR, "health_status_distribution.csv"), index=False)
-    train_test_df.to_csv(os.path.join(OUTPUT_DIR, "train_test_distribution.csv"), index=False)
 
     print("\nCharts and CSV files saved to the photo folder.")
 
