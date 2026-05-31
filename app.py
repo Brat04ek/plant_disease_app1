@@ -1,42 +1,106 @@
+"""
+FastAPI-застосунок для демонстраційного вебінтерфейсу системи
+автоматизованого діагностування хвороб рослинних культур.
+
+Файл відповідає за:
+- завантаження збережених компонентів моделі;
+- відображення HTML-сторінки користувацького інтерфейсу;
+- приймання зображення від користувача;
+- попередню перевірку якості зображення;
+- формування гібридного вектора ознак;
+- отримання прогнозу моделі та рекомендації.
+"""
+
+# Робота з файловою системою потрібна для побудови шляхів до моделей.
 import os
+
+# OpenCV використовується для декодування завантаженого зображення.
 import cv2
+
+# joblib застосовується для завантаження збережених sklearn-моделей.
 import joblib
+
+# NumPy потрібний для перетворення байтів зображення у масив.
 import numpy as np
 
+# FastAPI забезпечує серверну частину вебзастосунку та API-маршрути.
 from fastapi import FastAPI, UploadFile, File, Request
 from fastapi.responses import JSONResponse
+
+# Jinja2Templates використовується для повернення HTML-сторінки.
 from fastapi.templating import Jinja2Templates
+
+# StaticFiles дозволяє підключати CSS, JavaScript та інші статичні файли.
 from fastapi.staticfiles import StaticFiles
 
+# Імпортуємо функції попередньої обробки та формування ознак.
 from src.plant_diagnosis.image_processing import (
     preprocess_image,
     check_image_quality,
     extract_full_feature_vector
 )
 
+# Модуль рекомендацій перетворює технічну назву класу у зрозумілу відповідь.
 from src.plant_diagnosis.recommendations import get_recommendation
 
 
+# =========================
+# Global settings
+# =========================
+
+# Каталог, у якому зберігаються навчені компоненти моделі.
 MODELS_PATH = "models"
+
+# Поріг впевненості: якщо максимальна ймовірність нижча,
+# результат повертається зі статусом uncertain.
 CONFIDENCE_THRESHOLD = 0.55
 
+
+# =========================
+# FastAPI application setup
+# =========================
+
+# Створення FastAPI-застосунку з описом, який видно у документації сервісу.
 app = FastAPI(
     title="Plant Disease Diagnosis",
     description="Вебсайт для автоматизованого діагностування хвороб рослинних культур",
     version="2.0.0"
 )
 
+# Підключення каталогу HTML-шаблонів.
 templates = Jinja2Templates(directory="templates")
+
+# Підключення каталогу static, де зберігаються styles.css та app.js.
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 
+# =========================
+# Loading trained components
+# =========================
+
+# Словник візуальних слів MiniBatchKMeans для BoVW-ознак.
 kmeans = joblib.load(os.path.join(MODELS_PATH, "hybrid_bovw_kmeans.joblib"))
+
+# Фінальний ансамблевий класифікатор VotingClassifier.
 classifier = joblib.load(os.path.join(MODELS_PATH, "hybrid_classifier.joblib"))
+
+# LabelEncoder потрібний для перетворення числових міток у назви класів.
 label_encoder = joblib.load(os.path.join(MODELS_PATH, "hybrid_label_encoder.joblib"))
 
 
+# =========================
+# Web routes
+# =========================
+
 @app.get("/")
 def home(request: Request):
+    """
+    Відображення головної сторінки вебінтерфейсу.
+
+    Маршрут повертає HTML-шаблон index.html, у якому користувач
+    може завантажити зображення та запустити класифікацію.
+    """
+
     return templates.TemplateResponse(
         request,
         "index.html"
@@ -45,20 +109,38 @@ def home(request: Request):
 
 @app.get("/health")
 def health():
+    """
+    Технічний маршрут для перевірки працездатності сервісу.
+
+    Його можна використовувати для швидкої перевірки, що FastAPI
+    застосунок запущений і відповідає на запити.
+    """
+
     return {
         "status": "ok",
         "message": "Plant Disease Diagnosis web service is running"
     }
 
 
+# =========================
+# Image classification logic
+# =========================
+
 def classify_image(image: np.ndarray) -> dict:
     """
     Класифікація одного зображення.
-    Використовується і для вебінтерфейсу, і для API.
+
+    Функція використовується серверним маршрутом /predict і виконує
+    повний цикл застосування моделі: перевірку якості, формування
+    ознак, прогнозування класу та підготовку рекомендації.
     """
 
+    # Попередня обробка повертає кольорове зображення та grayscale-версію.
+    # Для перевірки розмитості достатньо зображення у відтінках сірого.
     _, gray = preprocess_image(image)
 
+    # Якщо зображення занадто розмите, модель не запускається.
+    # Це зменшує ризик отримання некоректного прогнозу через погану якість фото.
     if not check_image_quality(gray):
         return {
             "status": "bad_quality",
@@ -70,19 +152,31 @@ def classify_image(image: np.ndarray) -> dict:
             "recommendation": "Спробуйте зробити чіткіше фото листка при достатньому освітленні."
         }
 
+    # Формування гібридного вектора ознак:
+    # ORB/BoVW + HSV histogram + color statistics + LBP + disease area.
     feature_vector = extract_full_feature_vector(image, kmeans).reshape(1, -1)
 
+    # Для VotingClassifier використовується predict_proba,
+    # щоб отримати ймовірності для всіх класів.
     probabilities = classifier.predict_proba(feature_vector)[0]
 
+    # Індекс класу з найбільшою ймовірністю вважається основним прогнозом.
     predicted_index = int(np.argmax(probabilities))
+
+    # Рівень впевненості відповідає максимальній ймовірності серед класів.
     confidence = float(probabilities[predicted_index])
+
+    # Перетворення числової мітки назад у технічну назву класу датасету.
     predicted_class = label_encoder.inverse_transform([predicted_index])[0]
 
+    # Визначення трьох найбільш імовірних класів для пояснення результату.
     top_indices = np.argsort(probabilities)[::-1][:3]
 
+    # Список top-3 прогнозів буде відображений у вебінтерфейсі.
     top_predictions = []
 
     for idx in top_indices:
+        # Для кожного з top-3 класів отримуємо зрозумілу назву та ймовірність.
         class_name = label_encoder.inverse_transform([idx])[0]
         recommendation_data = get_recommendation(class_name)
 
@@ -93,8 +187,11 @@ def classify_image(image: np.ndarray) -> dict:
             "confidence_percent": round(float(probabilities[idx]) * 100, 2)
         })
 
+    # Отримання української назви та рекомендації для основного прогнозу.
     recommendation_data = get_recommendation(predicted_class)
 
+    # Якщо впевненість нижча за встановлений поріг,
+    # результат не подається як остаточно надійний діагноз.
     if confidence < CONFIDENCE_THRESHOLD:
         return {
             "status": "uncertain",
@@ -107,6 +204,8 @@ def classify_image(image: np.ndarray) -> dict:
             "recommendation": "Рекомендовано зробити якісніше фото або звернутися до фахівця."
         }
 
+    # Успішний результат повертається у форматі словника,
+    # який FastAPI автоматично перетворює у JSON-відповідь.
     return {
         "status": "success",
         "message": "Класифікацію виконано успішно.",
@@ -119,13 +218,29 @@ def classify_image(image: np.ndarray) -> dict:
     }
 
 
+# =========================
+# Prediction endpoint
+# =========================
+
 @app.post("/predict")
 async def predict(file: UploadFile = File(...)):
+    """
+    Основний серверний маршрут для класифікації зображення.
+
+    Маршрут приймає файл від вебінтерфейсу, декодує його у формат OpenCV,
+    викликає classify_image та повертає результат клієнтській частині.
+    """
+
+    # Зчитування всього завантаженого файлу у вигляді байтів.
     image_bytes = await file.read()
 
+    # Перетворення байтів у NumPy-масив, який може бути декодований OpenCV.
     np_array = np.frombuffer(image_bytes, np.uint8)
+
+    # Декодування JPG/PNG/JPEG у BGR-зображення OpenCV.
     image = cv2.imdecode(np_array, cv2.IMREAD_COLOR)
 
+    # Якщо OpenCV не зміг декодувати файл, він не є коректним зображенням.
     if image is None:
         return JSONResponse(
             status_code=400,
@@ -135,5 +250,9 @@ async def predict(file: UploadFile = File(...)):
             }
         )
 
+    # Якщо зображення зчитане успішно, передаємо його у модельну логіку.
     result = classify_image(image)
+
+    # Повернений словник автоматично передається браузеру як JSON.
+    # JavaScript на клієнтській стороні відображає його як блок результату.
     return result
