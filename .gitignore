@@ -6,4 +6,4 @@ dataset
 *.png
 /photo
 /results
-.joblib
+/models
