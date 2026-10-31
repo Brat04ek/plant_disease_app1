@@ -7,3 +7,9 @@ dataset
 /photo
 /results
 /models
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+.pytest_cache/

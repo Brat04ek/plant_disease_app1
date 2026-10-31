@@ -12,7 +12,7 @@ FastAPI-застосунок для демонстраційного вебін�
 """
 
 # Робота з файловою системою потрібна для побудови шляхів до моделей.
-import os
+from pathlib import Path
 
 # OpenCV використовується для декодування завантаженого зображення.
 import cv2
@@ -49,7 +49,9 @@ from src.plant_diagnosis.recommendations import get_recommendation
 # =========================
 
 # Каталог, у якому зберігаються навчені компоненти моделі.
-MODELS_PATH = "models"
+PROJECT_ROOT = Path(__file__).resolve().parent
+MODELS_PATH = PROJECT_ROOT / "models"
+MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 
 # Поріг впевненості: якщо максимальна ймовірність нижча,
 # результат повертається зі статусом uncertain.
@@ -68,24 +70,36 @@ app = FastAPI(
 )
 
 # Підключення каталогу HTML-шаблонів.
-templates = Jinja2Templates(directory="templates")
+templates = Jinja2Templates(directory=str(PROJECT_ROOT / "templates"))
 
 # Підключення каталогу static, де зберігаються styles.css та app.js.
-app.mount("/static", StaticFiles(directory="static"), name="static")
+app.mount("/static", StaticFiles(directory=str(PROJECT_ROOT / "static")), name="static")
 
 
 # =========================
 # Loading trained components
 # =========================
 
+MODEL_FILES = (
+    "hybrid_bovw_kmeans.joblib",
+    "hybrid_classifier.joblib",
+    "hybrid_label_encoder.joblib",
+)
+missing_models = [name for name in MODEL_FILES if not (MODELS_PATH / name).is_file()]
+if missing_models:
+    raise RuntimeError(
+        "Missing trained artifacts: " + ", ".join(missing_models)
+        + ". See README.md for dataset and training prerequisites."
+    )
+
 # Словник візуальних слів MiniBatchKMeans для BoVW-ознак.
-kmeans = joblib.load(os.path.join(MODELS_PATH, "hybrid_bovw_kmeans.joblib"))
+kmeans = joblib.load(MODELS_PATH / "hybrid_bovw_kmeans.joblib")
 
 # Фінальний ансамблевий класифікатор VotingClassifier.
-classifier = joblib.load(os.path.join(MODELS_PATH, "hybrid_classifier.joblib"))
+classifier = joblib.load(MODELS_PATH / "hybrid_classifier.joblib")
 
 # LabelEncoder потрібний для перетворення числових міток у назви класів.
-label_encoder = joblib.load(os.path.join(MODELS_PATH, "hybrid_label_encoder.joblib"))
+label_encoder = joblib.load(MODELS_PATH / "hybrid_label_encoder.joblib")
 
 
 # =========================
@@ -232,7 +246,15 @@ async def predict(file: UploadFile = File(...)):
     """
 
     # Зчитування всього завантаженого файлу у вигляді байтів.
-    image_bytes = await file.read()
+    image_bytes = await file.read(MAX_UPLOAD_BYTES + 1)
+    if len(image_bytes) > MAX_UPLOAD_BYTES:
+        return JSONResponse(status_code=413, content={
+            "status": "error", "message": "Максимальний розмір файлу — 10 MiB."
+        })
+    if not image_bytes:
+        return JSONResponse(status_code=400, content={
+            "status": "error", "message": "Завантажений файл порожній."
+        })
 
     # Перетворення байтів у NumPy-масив, який може бути декодований OpenCV.
     np_array = np.frombuffer(image_bytes, np.uint8)
